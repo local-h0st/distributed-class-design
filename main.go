@@ -8,9 +8,11 @@ import (
 )
 
 func main() {
-	go listenUDP(net.IPv4(127, 0, 0, 1), 12345)
+	fmt.Println("typing anything and press enter to send.")
+	// go listenUDP(net.IPv4(127, 0, 0, 1), 12345)
+	go listenGroup("224.0.0.250:56789")
 	for true {
-		sendUDP(net.IPv4(127, 0, 0, 1), 12345, getInput())
+		sendUDP("224.0.0.250:56789", getInput())
 	}
 }
 
@@ -37,18 +39,18 @@ func listenUDP(ip net.IP, port int) {
 }
 
 func getInput() string {
-	fmt.Print("# Input > ")
 	input := bufio.NewScanner(os.Stdin)
 	input.Scan()
 	inputStr := input.Text()
 	return inputStr
 }
 
-func sendUDP(ip net.IP, port int, msg string) {
-	socket, err := net.DialUDP("udp", nil, &net.UDPAddr{
-		IP:   ip,
-		Port: port,
-	})
+func sendUDP(targetAddr string, msg string) {
+	addr, err := net.ResolveUDPAddr("udp", targetAddr)
+	if err != nil {
+		fmt.Println(err)
+	}
+	socket, err := net.DialUDP("udp", nil, addr)
 	if err != nil {
 		fmt.Println("Failed to connect target addr.")
 		return
@@ -60,4 +62,24 @@ func sendUDP(ip net.IP, port int, msg string) {
 		fmt.Println("Failed to send msg.")
 		return
 	}
+}
+
+func listenGroup(targetAddr string) {
+	addr, err := net.ResolveUDPAddr("udp", targetAddr)
+	if err != nil {
+		fmt.Println(err)
+	}
+	conn, err := net.ListenMulticastUDP("udp", nil, addr)
+	if err != nil {
+		fmt.Println(err)
+	}
+	data := make([]byte, 1024)
+	for {
+		n, remoteAddr, err := conn.ReadFromUDP(data)
+		if err != nil {
+			fmt.Printf("error during read: %s", err)
+		}
+		fmt.Printf("{group msg(<%s>): %s}\n", remoteAddr, data[:n])
+	}
+
 }
