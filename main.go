@@ -9,18 +9,18 @@ import (
 
 func main() {
 	fmt.Println("typing anything and press enter to send.")
-	// go listenUDP(net.IPv4(127, 0, 0, 1), 12345)
 	go listenGroup("224.0.0.250:56789")
 	for true {
 		sendUDP("224.0.0.250:56789", getInput())
 	}
 }
 
-func listenUDP(ip net.IP, port int) {
-	conn, err := net.ListenUDP("udp", &net.UDPAddr{
-		IP:   ip,
-		Port: port,
-	})
+func listenUDP(targetAddr string) {
+	addr, err := net.ResolveUDPAddr("udp", targetAddr)
+	if err != nil {
+		fmt.Println(err)
+	}
+	conn, err := net.ListenUDP("udp", addr)
 	if err != nil {
 		fmt.Println("Failed to establish udp conn.")
 		return
