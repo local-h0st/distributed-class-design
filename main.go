@@ -8,10 +8,22 @@ import (
 )
 
 func main() {
-	fmt.Println("typing anything and press enter to send.")
-	go listenGroup("224.0.0.250:56789")
-	for true {
-		sendUDP("224.0.0.250:56789", getInput())
+	var addr string
+	fmt.Print("To choose mode, type 'single' or 'group':\nmode = ")
+	if getInput() == "single" {
+		fmt.Print("Listen single addr:port = ")
+		go listenUDP(getInput())
+		fmt.Print("Send to addr:port = ")
+		addr = getInput()
+	} else {
+		fmt.Print("Group addr:port = ")
+		addr = getInput()
+		go listenGroup(addr)
+	}
+
+	fmt.Println("Config done.\n\nTyping anything and press Enter to send.")
+	for {
+		sendUDP(addr, getInput())
 	}
 }
 
@@ -28,13 +40,13 @@ func listenUDP(targetAddr string) {
 	defer conn.Close()
 	for {
 		var data [1024]byte
-		n, _, err := conn.ReadFromUDP(data[:])
+		n, remoteAddr, err := conn.ReadFromUDP(data[:])
 		if err != nil {
 			fmt.Println("Failed to recv data from remote.")
 			continue
 		}
 
-		fmt.Println("# New Msg =>", string(data[:n]))
+		fmt.Println("#FromSingle(", remoteAddr, "): ", string(data[:n]))
 	}
 }
 
@@ -79,7 +91,7 @@ func listenGroup(targetAddr string) {
 		if err != nil {
 			fmt.Printf("error during read: %s", err)
 		}
-		fmt.Printf("{group msg(<%s>): %s}\n", remoteAddr, data[:n])
+		fmt.Printf("#FromGroup(", remoteAddr, "): ", data[:n])
 	}
 
 }
