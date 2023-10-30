@@ -7,27 +7,64 @@ import (
 	"os"
 )
 
+func getInput() string {
+	input := bufio.NewScanner(os.Stdin)
+	input.Scan()
+	inputStr := input.Text()
+	return inputStr
+}
+
+type HOMEWORK_INFO struct {
+	Name  string
+	ID    string
+	Seq   string
+	Grade string
+	Tag   string
+}
+
 func main() {
-	var addr string
 	fmt.Print("To choose mode, type 'single' or 'group':\nmode = ")
 	if getInput() == "single" {
 		fmt.Print("Listen single addr:port = ")
-		go listenUDP(getInput())
+		go listenSingle(getInput())
 		fmt.Print("Send to addr:port = ")
-		addr = getInput()
+		raddr := getInput()
+		fmt.Println("Config done. Typing anything and press Enter to send.")
+		for {
+			sendMsg(raddr, getInput())
+		}
 	} else {
 		fmt.Print("Group addr:port = ")
-		addr = getInput()
-		go listenGroup(addr)
+		gaddr := getInput()
+		go listenGroup(gaddr)
+		fmt.Println("Config done. Typing anything and press Enter to send.")
+		for {
+			sendMsg(gaddr, getInput())
+		}
 	}
 
-	fmt.Println("Config done.\n\nTyping anything and press Enter to send.")
-	for {
-		sendUDP(addr, getInput())
+}
+
+func sendMsg(targetAddr string, msg string) {
+	addr, err := net.ResolveUDPAddr("udp", targetAddr)
+	if err != nil {
+		fmt.Println(err)
+	}
+	socket, err := net.DialUDP("udp", nil, addr)
+	if err != nil {
+		fmt.Println("Failed to connect target addr.")
+		return
+	}
+	defer socket.Close()
+	sendData := []byte(msg)
+	_, err = socket.Write(sendData)
+	if err != nil {
+		fmt.Println("Failed to send msg.")
+		return
 	}
 }
 
-func listenUDP(targetAddr string) {
+func listenSingle(targetAddr string) {
 	addr, err := net.ResolveUDPAddr("udp", targetAddr)
 	if err != nil {
 		fmt.Println(err)
@@ -50,48 +87,16 @@ func listenUDP(targetAddr string) {
 	}
 }
 
-func getInput() string {
-	input := bufio.NewScanner(os.Stdin)
-	input.Scan()
-	inputStr := input.Text()
-	return inputStr
-}
-
-func sendUDP(targetAddr string, msg string) {
-	addr, err := net.ResolveUDPAddr("udp", targetAddr)
-	if err != nil {
-		fmt.Println(err)
-	}
-	socket, err := net.DialUDP("udp", nil, addr)
-	if err != nil {
-		fmt.Println("Failed to connect target addr.")
-		return
-	}
-	defer socket.Close()
-	sendData := []byte(msg)
-	_, err = socket.Write(sendData)
-	if err != nil {
-		fmt.Println("Failed to send msg.")
-		return
-	}
-}
-
-func listenGroup(targetAddr string) {
-	addr, err := net.ResolveUDPAddr("udp", targetAddr)
-	if err != nil {
-		fmt.Println(err)
-	}
-	conn, err := net.ListenMulticastUDP("udp", nil, addr)
-	if err != nil {
-		fmt.Println(err)
-	}
-	data := make([]byte, 1024)
+func listenGroup(groupAddr string) {
+	gaddr, _ := net.ResolveUDPAddr("udp4", groupAddr)
+	conn, _ := net.ListenMulticastUDP("udp", nil, gaddr)
+	conn.SetReadBuffer(1024)
 	for {
+		data := make([]byte, 1024)
 		n, remoteAddr, err := conn.ReadFromUDP(data)
 		if err != nil {
 			fmt.Printf("error during read: %s", err)
 		}
-		fmt.Printf("#FromGroup(", remoteAddr, "): ", data[:n])
+		fmt.Printf(string(remoteAddr.IP) + ":" + string(remoteAddr.Port) + "-> " + string(data[:n]) + "\n")
 	}
-
 }
