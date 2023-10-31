@@ -46,7 +46,7 @@ func main() {
 func handleInfo(jsonstr string, raddr *net.UDPAddr) {
 	if raddr.String() == localAddr {
 		fmt.Println("Send successfully(myself received).")
-		return
+		//return
 	}
 
 	h := HOMEWORK_INFO{}
