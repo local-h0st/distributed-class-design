@@ -2,17 +2,11 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
 )
-
-func getInput() string {
-	input := bufio.NewScanner(os.Stdin)
-	input.Scan()
-	inputStr := input.Text()
-	return inputStr
-}
 
 type HOMEWORK_INFO struct {
 	Name  string
@@ -22,35 +16,74 @@ type HOMEWORK_INFO struct {
 	Tag   string
 }
 
-func main() {
-	fmt.Print("To choose mode, type 'single' or 'group':\nmode = ")
-	if getInput() == "single" {
-		fmt.Print("Listen single addr:port = ")
-		go listenSingle(getInput())
-		fmt.Print("Send to addr:port = ")
-		raddr := getInput()
-		fmt.Println("Config done. Typing anything and press Enter to send.")
-		for {
-			sendMsg(raddr, getInput())
-		}
-	} else {
-		fmt.Print("Group addr:port = ")
-		gaddr := getInput()
-		go listenGroup(gaddr)
-		fmt.Println("Config done. Typing anything and press Enter to send.")
-		for {
-			sendMsg(gaddr, getInput())
-		}
-	}
+var localAddr string
+var groupAddr string
+var HomeworkRecords []HOMEWORK_INFO
 
+func main() {
+	fmt.Print("Set Multi-cast group addr:port =")
+	groupAddr = getInput()
+	fmt.Print("Set local port = ")
+	localAddr = getInterfaceIP("eth0") + ":" + getInput()
+	go listenGroup(groupAddr, handleInfo)
+	for {
+		sendStr(groupAddr, generateHomeworkInfo())
+	}
 }
 
-func sendMsg(targetAddr string, msg string) {
-	addr, err := net.ResolveUDPAddr("udp", targetAddr)
-	if err != nil {
-		fmt.Println(err)
+func handleInfo(jsonstr string, raddr *net.UDPAddr) {
+	if raddr.String() == localAddr {
+		fmt.Println("Send successfully, myself received.")
+	} else {
+		h := HOMEWORK_INFO{}
+		err := json.Unmarshal([]byte(jsonstr), &h)
+		if err != nil {
+			fmt.Println("Msg json received but unmarshal failed: " + jsonstr)
+			return
+		}
+		HomeworkRecords = append(HomeworkRecords, h)
+		fmt.Println("Record received from " + raddr.String() + ", and it has been stored to slice []HomeworkRecords:")
+		fmt.Println(HomeworkRecords)
 	}
-	socket, err := net.DialUDP("udp", nil, addr)
+}
+
+func getInterfaceIP(name string) string {
+	ifi, _ := net.InterfaceByName(name)
+	addrs, _ := ifi.Addrs()
+	for _, addr := range addrs {
+		ipnet, ok := addr.(*net.IPNet)
+		if ok && !ipnet.IP.IsLoopback() {
+			if ipnet.IP.To4() != nil {
+				return ipnet.IP.String()
+			}
+		}
+	}
+	return ""
+}
+func getInput() string {
+	input := bufio.NewScanner(os.Stdin)
+	input.Scan()
+	inputStr := input.Text()
+	return inputStr
+}
+
+func generateHomeworkInfo() string {
+	fmt.Println("Enter Name, ID, Seq, Grade, Tag in sequence.")
+	h := HOMEWORK_INFO{
+		Name:  getInput(),
+		ID:    getInput(),
+		Seq:   getInput(),
+		Grade: getInput(),
+		Tag:   getInput(),
+	}
+	s, _ := json.Marshal(h)
+	return string(s)
+}
+
+func sendStr(targetAddr string, msg string) {
+	raddr, _ := net.ResolveUDPAddr("udp", targetAddr)
+	laddr, _ := net.ResolveUDPAddr("udp", localAddr)
+	socket, err := net.DialUDP("udp", laddr, raddr)
 	if err != nil {
 		fmt.Println("Failed to connect target addr.")
 		return
@@ -63,40 +96,13 @@ func sendMsg(targetAddr string, msg string) {
 		return
 	}
 }
-
-func listenSingle(targetAddr string) {
-	addr, err := net.ResolveUDPAddr("udp", targetAddr)
-	if err != nil {
-		fmt.Println(err)
-	}
-	conn, err := net.ListenUDP("udp", addr)
-	if err != nil {
-		fmt.Println("Failed to establish udp conn.")
-		return
-	}
-	defer conn.Close()
-	for {
-		var data [1024]byte
-		n, remoteAddr, err := conn.ReadFromUDP(data[:])
-		if err != nil {
-			fmt.Println("Failed to recv data from remote.")
-			continue
-		}
-
-		fmt.Println("#FromSingle(", remoteAddr, "): ", string(data[:n]))
-	}
-}
-
-func listenGroup(groupAddr string) {
+func listenGroup(groupAddr string, handleFunc func(data string, raddr *net.UDPAddr)) {
 	gaddr, _ := net.ResolveUDPAddr("udp4", groupAddr)
 	conn, _ := net.ListenMulticastUDP("udp", nil, gaddr)
 	conn.SetReadBuffer(1024)
 	for {
 		data := make([]byte, 1024)
-		n, remoteAddr, err := conn.ReadFromUDP(data)
-		if err != nil {
-			fmt.Printf("error during read: %s", err)
-		}
-		fmt.Printf(string(remoteAddr.IP) + ":" + string(remoteAddr.Port) + "-> " + string(data[:n]) + "\n")
+		n, raddr, _ := conn.ReadFromUDP(data)
+		handleFunc(string(data[:n]), raddr)
 	}
 }
